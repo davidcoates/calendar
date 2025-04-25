@@ -61,12 +61,33 @@ class Day:
         return ((self.day_of_month + 1) % 7) + 1
 
     def short_string(self):
-        month = self.month or 'H'
-        return f"{self.day_of_month:>02}/{month}/{self.season}/{self.year:>02}"
+        return f"{self.day_of_month:>02}/{self.month_code()}/{self.season}/{self.year:>02}"
+
+    def month_code(self):
+        if self.month is None:
+            match self.season:
+                case Season.SPRING:
+                    return "S"
+                case Season.SUMMER:
+                    return "A"
+                case Season.AUTUMN:
+                    return "W"
+                case Season.WINTER:
+                    return "V"
+        else:
+            return str(self.month)
 
     def month_string(self):
         if self.month is None:
-            return f"{self.season} Holiday"
+            match self.season:
+                case Season.SPRING:
+                    return "Summer Solstice Holiday"
+                case Season.SUMMER:
+                    return "Autumnal Equinox Holiday"
+                case Season.AUTUMN:
+                    return "Winter Solstice Holiday"
+                case Season.WINTER:
+                    return "Vernal Equinox Holiday"
         else:
             return ["Early", "Mid", "Late"][self.month - 1] + " " + str(self.season)
 

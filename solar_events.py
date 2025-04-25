@@ -18,6 +18,16 @@ class SolarEventType(Enum):
     def __str__(self):
         return self.name.title().replace('_', ' ')
 
+    def localized_string(self, hemisphere: Hemisphere):
+        match self:
+            case SolarEventType.DECEMBER_SOLSTICE:
+                type = "Winter Solstice"  if hemisphere == Hemisphere.NORTHERN else "Summer Solstice"
+            case SolarEventType.MARCH_EQUINOX:
+                type = "Vernal Equinox"   if hemisphere == Hemisphere.NORTHERN else "Autumnal Equinox"
+            case SolarEventType.JUNE_SOLSTICE:
+                type = "Summer Solstice"  if hemisphere == Hemisphere.NORTHERN else "Winter Solstice"
+            case SolarEventType.SEPTEMBER_EQUINOX:
+                type = "Autumnal Equinox" if hemisphere == Hemisphere.NORTHERN else "Vernal Equinox"
 
 @dataclass
 class SolarEvent:
@@ -28,16 +38,7 @@ class SolarEvent:
         return f"{self.type} at {format_time(self.time)}"
 
     def localized_string(self, hemisphere: Hemisphere):
-        match self.type:
-            case SolarEventType.DECEMBER_SOLSTICE:
-                type = "Winter Solstice"  if hemisphere == Hemisphere.NORTHERN else "Summer Solstice"
-            case SolarEventType.MARCH_EQUINOX:
-                type = "Spring Equinox"   if hemisphere == Hemisphere.NORTHERN else "Autumnal Equinox"
-            case SolarEventType.JUNE_SOLSTICE:
-                type = "Summer Solstice"  if hemisphere == Hemisphere.NORTHERN else "Winter Solstice"
-            case SolarEventType.SEPTEMBER_EQUINOX:
-                type = "Autumnal Equinox" if hemisphere == Hemisphere.NORTHERN else "Spring Equinox"
-        return f"{type} at {format_time(self.time)}"
+        return f"{self.type.localized_string(hemisphere)} at {format_time(self.time)}"
 
 
 SOLAR_EVENTS = [
