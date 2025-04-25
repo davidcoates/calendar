@@ -246,6 +246,7 @@ class Calendar:
                     week.append(day_of_month_string(day))
                     day = self.next_day_or_fail(day)
                 print('|' + '|'.join(week) + '|')
+            print("-------------------------------------------")
             print("")
             return day
 
