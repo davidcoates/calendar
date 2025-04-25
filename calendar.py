@@ -38,6 +38,9 @@ def ordinal(n: int):
     suffix = "th" if 11 <= (n % 100) <= 13 else ["th", "st", "nd", "rd", "th"][min(n % 10, 4)]
     return f"{n}{suffix}"
 
+MONTHS_IN_SEASON = 3
+DAYS_IN_WEEK = 7
+DAYS_IN_MONTH = 28
 
 @dataclass
 class Day:
@@ -61,21 +64,13 @@ class Day:
         return ((self.day_of_month + 1) % 7) + 1
 
     def short_string(self):
-        return f"{self.day_of_month:>02}/{self.month_code()}/{self.season}/{self.year:>02}"
+        return f"{self.day_of_month:>02}/{self.month_code()}/{self.year:>02}"
 
     def month_code(self):
         if self.month is None:
-            match self.season:
-                case Season.SPRING:
-                    return "S"
-                case Season.SUMMER:
-                    return "A"
-                case Season.AUTUMN:
-                    return "W"
-                case Season.WINTER:
-                    return "V"
+            return f"H{self.season.value + 1}"
         else:
-            return str(self.month)
+            return f"{self.month + MONTHS_IN_SEASON*self.season.value:>02}"
 
     def month_string(self):
         if self.month is None:
@@ -95,12 +90,8 @@ class Day:
         return f"{self.weekday.name.title()} the {ordinal(self.day_of_month)} of {self.month_string()}, Year {self.year}"
 
     def __str__(self):
-        return self.long_string()
+        return self.long_string() + " (" + self.short_string() + ")"
 
-
-MONTHS_IN_SEASON = 3
-DAYS_IN_WEEK = 7
-DAYS_IN_MONTH = 28
 
 @dataclass
 class Calendar:
