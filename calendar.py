@@ -39,6 +39,7 @@ DAYS_IN_MONTH = 28
 
 @dataclass
 class Day:
+    gregorian_date: date
     start: datetime
     end: datetime
     year: int
@@ -46,10 +47,6 @@ class Day:
     month: int | None
     day_of_month: int
     days_since_epoch: int
-
-    @property
-    def date(self) -> date:
-        return date(self.start.year, self.start.month, self.start.day)
 
     @property
     def weekday(self) -> Weekday:
@@ -103,10 +100,15 @@ class Calendar:
                 epoch_date = date(2024, 9, 22)
             case Hemisphere.NORTHERN:
                 epoch_date = date(2025, 3, 23)
-        if Weekday(self._start_of_day(epoch_date).weekday()) == Weekday.MONDAY: # fix timezone off-by-one
-            epoch_date = epoch_date - timedelta(days=1)
+        # fix timezone off-by-ones
+        match Weekday(self._start_of_day(epoch_date).weekday()):
+            case Weekday.MONDAY:
+                epoch_date = epoch_date - timedelta(days=1)
+            case Weekday.SATURDAY:
+                epoch_date = epoch_date + timedelta(days=1)
         assert Weekday(self._start_of_day(epoch_date).weekday()) == Weekday.SUNDAY
         self.epoch = Day(
+            gregorian_date=epoch_date,
             start=self._start_of_day(epoch_date),
             end=self._end_of_day(epoch_date),
             year=1,
@@ -171,10 +173,10 @@ class Calendar:
             day = self._next_day(day)
 
     def _start_of_day(self, date) -> datetime:
-        return astral.sun.sunrise(self.observer, date).astimezone(self.timezone)
+        return astral.sun.sunrise(self.observer, date, tzinfo=self.timezone)
 
     def _end_of_day(self, date) -> datetime:
-        return astral.sun.sunrise(self.observer, date + timedelta(days=1)).astimezone(self.timezone)
+        return astral.sun.sunrise(self.observer, date + timedelta(days=1), tzinfo=self.timezone)
 
     def _season_transition_solar_event_type(self, season: Season) -> SolarEventType:
         match self.hemisphere:
@@ -207,9 +209,9 @@ class Calendar:
         return None
 
     def _next_day(self, day: Day) -> Day | None:
-        date = day.date + timedelta(days=1)
-        start = self._start_of_day(date)
-        end = self._end_of_day(date)
+        gregorian_date = day.gregorian_date + timedelta(days = 1)
+        start = self._start_of_day(gregorian_date)
+        end = self._end_of_day(gregorian_date)
         if day.month is not None and not (day.month == MONTHS_IN_SEASON and day.day_of_month == DAYS_IN_MONTH):
             year = day.year
             season = day.season
@@ -230,7 +232,7 @@ class Calendar:
             if solar_event is None:
                 return None
             assert day.weekday == Weekday.SATURDAY
-            leap_week_threshold = self._end_of_day(day.date + timedelta(days=2))
+            leap_week_threshold = self._end_of_day(gregorian_date + timedelta(days=2))
             if solar_event.time > leap_week_threshold: # insert a leap week
                 year = day.year
                 season = day.season
@@ -242,6 +244,7 @@ class Calendar:
                 day_of_month = 1
                 month = 1
         return Day(
+            gregorian_date=gregorian_date,
             start=start,
             end=end,
             year=year,
