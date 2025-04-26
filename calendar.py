@@ -1,15 +1,15 @@
 import astral
 import astral.sun
 from dataclasses import dataclass
-from datetime import date, datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta, tzinfo
 from enum import Enum, auto
 
 from solar_events import *
+from format import *
 
 
 CANONICAL_LATITUDE = -33.865143
 CANONICAL_LONGITUDE = 151.209900
-
 
 class Season(Enum):
     SPRING = 0
@@ -33,11 +33,6 @@ class Weekday(Enum):
     FRIDAY = 4
     SATURDAY = 5
 
-
-def ordinal(n: int):
-    suffix = "th" if 11 <= (n % 100) <= 13 else ["th", "st", "nd", "rd", "th"][min(n % 10, 4)]
-    return f"{n}{suffix}"
-
 MONTHS_IN_SEASON = 3
 DAYS_IN_WEEK = 7
 DAYS_IN_MONTH = 28
@@ -50,6 +45,7 @@ class Day:
     season: Season
     month: int | None
     day_of_month: int
+    days_since_epoch: int
 
     @property
     def date(self) -> date:
@@ -97,6 +93,7 @@ class Day:
 class Calendar:
     latitude: float = CANONICAL_LATITUDE
     longitude: float = CANONICAL_LONGITUDE
+    timezone: tzinfo | None = None # None for local timezone
 
     def __post_init__(self):
         self.observer = astral.Observer(self.latitude, self.longitude)
@@ -106,25 +103,80 @@ class Calendar:
                 epoch_date = date(2024, 9, 22)
             case Hemisphere.NORTHERN:
                 epoch_date = date(2025, 3, 23)
-        if Weekday(self.start_of_day(epoch_date).astimezone().weekday()) == Weekday.MONDAY: # fix timezone off-by-one
+        if Weekday(self._start_of_day(epoch_date).weekday()) == Weekday.MONDAY: # fix timezone off-by-one
             epoch_date = epoch_date - timedelta(days=1)
-        assert Weekday(self.start_of_day(epoch_date).astimezone().weekday()) == Weekday.SUNDAY
+        assert Weekday(self._start_of_day(epoch_date).weekday()) == Weekday.SUNDAY
         self.epoch = Day(
-            start=self.start_of_day(epoch_date),
-            end=self.end_of_day(epoch_date),
+            start=self._start_of_day(epoch_date),
+            end=self._end_of_day(epoch_date),
             year=1,
             season=Season.SPRING,
             month=1,
             day_of_month=1,
+            days_since_epoch=0
         )
+        self.days = list(self._calc_days())
 
-    def start_of_day(self, date) -> datetime:
-        return astral.sun.sunrise(self.observer, date)
+    def find_day(self, time: datetime) -> Day | None:
+        for day in self.days:
+            if day.start <= time < day.end:
+                return day
+        return None
 
-    def end_of_day(self, date) -> datetime:
-        return astral.sun.sunrise(self.observer, date + timedelta(days=1))
+    def print_block(self, year: int, season: Season, month: int | None, highlight : Day | None = None):
+        def is_solar_event_on_day(day):
+            for solar_event in SOLAR_EVENTS:
+                if day.start <= solar_event.time < day.end:
+                    return True
+            return False
+        WIDTH = 43
+        if season == Season.SPRING and month == 1:
+            print("")
+            print(f"* Year {year} *".center(WIDTH))
+            print("")
+        day = next(day for day in self.days if day.year == year and day.season == season and day.month == month)
+        assert day.day_of_month == 1
+        print(f"- {day.month_string()} -".center(WIDTH))
+        print("-------------------------------------------")
+        print("| Sun | Mon | Tue | Wed | Thu | Fri | Sat |")
+        print("-------------------------------------------")
+        month = day.month
+        while day.month == month:
+            week = []
+            for _ in range(7):
+                day_str = f"{'>' if day == highlight else ' '}{'*' if is_solar_event_on_day(day) else ' '}{day.day_of_month:>2}{'<' if day == highlight else ' '}"
+                week.append(day_str)
+                day = self.days[day.days_since_epoch + 1]
+            print('|' + '|'.join(week) + '|')
+        print("-------------------------------------------")
+        print("")
 
-    def season_transition_solar_event_type(self, season: Season) -> SolarEventType:
+    def print(self, year: int, season: Season, month: int | None, highlight : Day | None = None, blocks : int = 16):
+        def next_block(year, season, month):
+            if month is None:
+                if season == Season.WINTER:
+                    return (year + 1, Season.SPRING, 1)
+                else:
+                    return (year, season.next(), 1)
+            else:
+                return (year, season, month + 1 if month < 3 else None)
+        for i in range(blocks):
+            self.print_block(year, season, month, highlight)
+            (year, season, month) = next_block(year, season, month)
+
+    def _calc_days(self):
+        day = self.epoch
+        while day is not None:
+            yield day
+            day = self._next_day(day)
+
+    def _start_of_day(self, date) -> datetime:
+        return astral.sun.sunrise(self.observer, date).astimezone(self.timezone)
+
+    def _end_of_day(self, date) -> datetime:
+        return astral.sun.sunrise(self.observer, date + timedelta(days=1)).astimezone(self.timezone)
+
+    def _season_transition_solar_event_type(self, season: Season) -> SolarEventType:
         match self.hemisphere:
             case Hemisphere.NORTHERN:
                 match season:
@@ -147,24 +199,17 @@ class Calendar:
                     case Season.WINTER:
                         return SolarEventType.SEPTEMBER_EQUINOX
 
-    def find_season_transition_solar_event(self, day: Day) -> SolarEvent | None:
-        expected_solar_event_type = self.season_transition_solar_event_type(day.season)
+    def _find_season_transition_solar_event(self, day: Day) -> SolarEvent | None:
+        expected_solar_event_type = self._season_transition_solar_event_type(day.season)
         for solar_event in SOLAR_EVENTS:
             if solar_event.type == expected_solar_event_type and abs(solar_event.time - day.start) <= timedelta(days=120): # check in right year
                 return solar_event
         return None
 
-    def is_solar_event_on_day(self, day: Day) -> bool:
-        solar_event = self.find_season_transition_solar_event(day)
-        if solar_event is None:
-            return False
-        else:
-            return day.start <= solar_event.time < day.end
-
-    def next_day(self, day: Day) -> Day | None:
+    def _next_day(self, day: Day) -> Day | None:
         date = day.date + timedelta(days=1)
-        start = self.start_of_day(date)
-        end = self.end_of_day(date)
+        start = self._start_of_day(date)
+        end = self._end_of_day(date)
         if day.month is not None and not (day.month == MONTHS_IN_SEASON and day.day_of_month == DAYS_IN_MONTH):
             year = day.year
             season = day.season
@@ -181,11 +226,11 @@ class Calendar:
              day_of_month = day.day_of_month + 1
              month = None
         else:
-            solar_event = self.find_season_transition_solar_event(day)
+            solar_event = self._find_season_transition_solar_event(day)
             if solar_event is None:
                 return None
             assert day.weekday == Weekday.SATURDAY
-            leap_week_threshold = self.end_of_day(day.date + timedelta(days=2))
+            leap_week_threshold = self._end_of_day(day.date + timedelta(days=2))
             if solar_event.time > leap_week_threshold: # insert a leap week
                 year = day.year
                 season = day.season
@@ -203,67 +248,5 @@ class Calendar:
             season=season,
             month=month,
             day_of_month=day_of_month,
+            days_since_epoch=day.days_since_epoch + 1,
         )
-
-    def next_day_or_fail(self, day: Day) -> Day:
-        next_day = self.next_day(day)
-        if next_day is None:
-            assert False
-        return next_day
-
-    def days(self):
-        day = self.epoch
-        while day is not None:
-            yield day
-            day = self.next_day(day)
-
-    def today(self) -> Day:
-        today = datetime.now(tz=timezone.utc)
-        for day in self.days():
-            if day.start <= today < day.end:
-                return day
-        assert False
-
-    def print_from(self, day: Day):
-
-        def is_solar_event_on_day(day):
-            for solar_event in SOLAR_EVENTS:
-                if day.start <= solar_event.time < day.end:
-                    return True
-            return False
-
-        def day_of_month_string(day):
-            if is_solar_event_on_day(day):
-                return f" *{day.day_of_month:>2} "
-            else:
-                return f"  {day.day_of_month:>2} "
-
-        WIDTH = 43
-        def print_month(day):
-            if day.season == Season.SPRING and day.month == 1:
-                print("")
-                print(f"* Year {day.year} *".center(WIDTH))
-                print("")
-            if day.day_of_month != 1:
-                day = next(back for back in self.days() if back.year == day.year and back.season == day.season and back.month == day.month)
-            assert day.day_of_month == 1
-            print(f"- {day.month_string()} -".center(WIDTH))
-            print("-------------------------------------------")
-            print("| Sun | Mon | Tue | Wed | Thu | Fri | Sat |")
-            print("-------------------------------------------")
-            month = day.month
-            while day.month == month:
-                week = []
-                for _ in range(7):
-                    week.append(day_of_month_string(day))
-                    day = self.next_day_or_fail(day)
-                print('|' + '|'.join(week) + '|')
-            print("-------------------------------------------")
-            print("")
-            return day
-
-        end_year = day.year + 1
-        end_season = day.season
-        end_month = day.month
-        while not (day.year == end_year and day.season == end_season and day.month == end_month):
-            day = print_month(day)
