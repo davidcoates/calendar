@@ -12,7 +12,7 @@ def main():
     local_timezone = datetime.now(timezone.utc).astimezone().tzinfo
     parser.add_argument("--latitude", type=float, default=CANONICAL_LATITUDE, help="used to derive sunrise/sunset times (default is that of Sydney, Australia)")
     parser.add_argument("--longitude", type=float, default=CANONICAL_LONGITUDE, help="used to derive sunrise/sunset times (default is that of Sydney, Australia)")
-    parser.add_argument("--timezone", type=str, default=None, metavar='TIMEZONE', choices=zoneinfo.available_timezones(), help=f"used to ensure weekday alignment (default is the system local timezone = {local_timezone})")
+    parser.add_argument("--timezone", type=str, default=None, metavar='TIMEZONE', choices=zoneinfo.available_timezones(), help=f"used when displaying times (default is the system local timezone = {local_timezone})")
     parser.add_argument("-t", "--time", type=str, default=None, help="display the date at the described timepoint (in isoformat), not 'now'")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -21,7 +21,9 @@ def main():
 
     args = parser.parse_args()
 
-    if args.timezone is not None:
+    if args.timezone is None:
+        args.timezone = local_timezone
+    else:
         args.timezone = zoneinfo.ZoneInfo(args.timezone)
 
     calendar = Calendar(args.latitude, args.longitude, args.timezone)

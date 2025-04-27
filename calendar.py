@@ -90,9 +90,9 @@ class Day:
 
 @dataclass
 class Calendar:
-    latitude: float = CANONICAL_LATITUDE
-    longitude: float = CANONICAL_LONGITUDE
-    timezone: tzinfo | None = None # None for local timezone
+    latitude: float
+    longitude: float
+    timezone: tzinfo
 
     def __post_init__(self):
         self.observer = astral.Observer(self.latitude, self.longitude)
