@@ -1,5 +1,6 @@
 import astral
 import astral.sun
+import zoneinfo
 from dataclasses import dataclass
 from datetime import date, datetime, timezone, timedelta, tzinfo
 from enum import Enum, auto
@@ -10,6 +11,8 @@ from format import *
 
 CANONICAL_LATITUDE = -33.865143
 CANONICAL_LONGITUDE = 151.209900
+CANONICAL_TIMEZONE = zoneinfo.ZoneInfo("Australia/Sydney")
+CANONICAL_EPOCH = date(2024, 9, 22)
 
 class Season(Enum):
     SPRING = 0
@@ -39,7 +42,6 @@ DAYS_IN_MONTH = 28
 
 @dataclass
 class Day:
-    gregorian_date: date
     start: datetime
     end: datetime
     year: int
@@ -95,29 +97,8 @@ class Calendar:
     def __post_init__(self):
         self.observer = astral.Observer(self.latitude, self.longitude)
         self.hemisphere = Hemisphere.NORTHERN if self.latitude > 0 else Hemisphere.SOUTHERN
-        match self.hemisphere:
-            case Hemisphere.SOUTHERN:
-                epoch_date = date(2024, 9, 22)
-            case Hemisphere.NORTHERN:
-                epoch_date = date(2025, 3, 23)
-        # fix timezone off-by-ones
-        match Weekday(self._start_of_day(epoch_date).weekday()):
-            case Weekday.MONDAY:
-                epoch_date = epoch_date - timedelta(days=1)
-            case Weekday.SATURDAY:
-                epoch_date = epoch_date + timedelta(days=1)
-        assert Weekday(self._start_of_day(epoch_date).weekday()) == Weekday.SUNDAY
-        self.epoch = Day(
-            gregorian_date=epoch_date,
-            start=self._start_of_day(epoch_date),
-            end=self._end_of_day(epoch_date),
-            year=1,
-            season=Season.SPRING,
-            month=1,
-            day_of_month=1,
-            days_since_epoch=0
-        )
-        self.days = list(self._calc_days())
+        self.days = self._calc_days()
+        self.epoch = self.days[0]
 
     def find_day(self, time: datetime) -> Day | None:
         for day in self.days:
@@ -166,11 +147,75 @@ class Calendar:
             self.print_block(year, season, month, highlight)
             (year, season, month) = next_block(year, season, month)
 
-    def _calc_days(self):
-        day = self.epoch
-        while day is not None:
+    def _start_of_canonical_day(self, date) -> datetime:
+        return astral.sun.sunrise(astral.Observer(CANONICAL_LATITUDE, CANONICAL_LONGITUDE), date, tzinfo=CANONICAL_TIMEZONE)
+
+    def _end_of_canonical_day(self, date) -> datetime:
+        return astral.sun.sunrise(astral.Observer(CANONICAL_LATITUDE, CANONICAL_LONGITUDE), date + timedelta(days=1), tzinfo=CANONICAL_TIMEZONE)
+
+    def _calc_canonical_days(self):
+        assert Weekday(self._start_of_canonical_day(CANONICAL_EPOCH).weekday()) == Weekday.SUNDAY
+        gregorian_date = CANONICAL_EPOCH
+        day = Day(
+            start=self._start_of_canonical_day(gregorian_date),
+            end=self._end_of_canonical_day(gregorian_date),
+            year=1,
+            season=Season.SPRING,
+            month=1,
+            day_of_month=1,
+            days_since_epoch=0
+        )
+        yield day
+        while True:
+            gregorian_date = gregorian_date + timedelta(days=1)
+            start = self._start_of_canonical_day(gregorian_date)
+            end = self._end_of_canonical_day(gregorian_date)
+            if day.month is not None and not (day.month == MONTHS_IN_SEASON and day.day_of_month == DAYS_IN_MONTH):
+                year = day.year
+                season = day.season
+                month = day.month + 1 if day.day_of_month == DAYS_IN_MONTH else day.month
+                day_of_month = (day.day_of_month % DAYS_IN_MONTH) + 1
+            elif day.month is not None: # transition to holiday
+                year = day.year
+                season = day.season
+                day_of_month = 1
+                month = None
+            elif day.day_of_month % DAYS_IN_WEEK != 0:
+                 year = day.year
+                 season = day.season
+                 day_of_month = day.day_of_month + 1
+                 month = None
+            else:
+                assert day.weekday == Weekday.SATURDAY
+                solar_events = [ solar_event for solar_event in SOLAR_EVENTS if abs(solar_event.time.date() - gregorian_date) <= timedelta(days=14) ]
+                if not solar_events:
+                    return
+                [ solar_event ] = solar_events
+                leap_week_threshold = self._end_of_canonical_day(gregorian_date + timedelta(days=2))
+                if solar_event.time > leap_week_threshold: # insert a leap week
+                    year = day.year
+                    season = day.season
+                    day_of_month = day.day_of_month + 1
+                    month = None
+                else:
+                    year = day.year + 1 if day.season == Season.WINTER else day.year
+                    season = day.season.next()
+                    day_of_month = 1
+                    month = 1
+            day = Day(
+                start=start,
+                end=end,
+                year=year,
+                season=season,
+                month=month,
+                day_of_month=day_of_month,
+                days_since_epoch=day.days_since_epoch + 1,
+            )
             yield day
-            day = self._next_day(day)
+
+    def _calc_days(self) -> list[Day]:
+        days = list(self._calc_canonical_days())
+        return list(self._localize(days))
 
     def _start_of_day(self, date) -> datetime:
         return astral.sun.sunrise(self.observer, date, tzinfo=self.timezone)
@@ -178,78 +223,30 @@ class Calendar:
     def _end_of_day(self, date) -> datetime:
         return astral.sun.sunrise(self.observer, date + timedelta(days=1), tzinfo=self.timezone)
 
-    def _season_transition_solar_event_type(self, season: Season) -> SolarEventType:
-        match self.hemisphere:
-            case Hemisphere.NORTHERN:
-                match season:
-                    case Season.SPRING:
-                        return SolarEventType.JUNE_SOLSTICE
-                    case Season.SUMMER:
-                        return SolarEventType.SEPTEMBER_EQUINOX
-                    case Season.AUTUMN:
-                        return SolarEventType.DECEMBER_SOLSTICE
-                    case Season.WINTER:
-                        return SolarEventType.MARCH_EQUINOX
-            case Hemisphere.SOUTHERN:
-                match season:
-                    case Season.SPRING:
-                        return SolarEventType.DECEMBER_SOLSTICE
-                    case Season.SUMMER:
-                        return SolarEventType.MARCH_EQUINOX
-                    case Season.AUTUMN:
-                        return SolarEventType.JUNE_SOLSTICE
-                    case Season.WINTER:
-                        return SolarEventType.SEPTEMBER_EQUINOX
-
-    def _find_season_transition_solar_event(self, day: Day) -> SolarEvent | None:
-        expected_solar_event_type = self._season_transition_solar_event_type(day.season)
-        for solar_event in SOLAR_EVENTS:
-            if solar_event.type == expected_solar_event_type and abs(solar_event.time - day.start) <= timedelta(days=120): # check in right year
-                return solar_event
-        return None
-
-    def _next_day(self, day: Day) -> Day | None:
-        gregorian_date = day.gregorian_date + timedelta(days = 1)
-        start = self._start_of_day(gregorian_date)
-        end = self._end_of_day(gregorian_date)
-        if day.month is not None and not (day.month == MONTHS_IN_SEASON and day.day_of_month == DAYS_IN_MONTH):
-            year = day.year
-            season = day.season
-            month = day.month + 1 if day.day_of_month == DAYS_IN_MONTH else day.month
-            day_of_month = (day.day_of_month % DAYS_IN_MONTH) + 1
-        elif day.month is not None: # transition to holiday
-            year = day.year
-            season = day.season
-            day_of_month = 1
-            month = None
-        elif day.day_of_month % DAYS_IN_WEEK != 0:
-             year = day.year
-             season = day.season
-             day_of_month = day.day_of_month + 1
-             month = None
-        else:
-            solar_event = self._find_season_transition_solar_event(day)
-            if solar_event is None:
-                return None
-            assert day.weekday == Weekday.SATURDAY
-            leap_week_threshold = self._end_of_day(gregorian_date + timedelta(days=2))
-            if solar_event.time > leap_week_threshold: # insert a leap week
-                year = day.year
-                season = day.season
-                day_of_month = day.day_of_month + 1
-                month = None
-            else:
-                year = day.year + 1 if day.season == Season.WINTER else day.year
-                season = day.season.next()
-                day_of_month = 1
-                month = 1
-        return Day(
-            gregorian_date=gregorian_date,
-            start=start,
-            end=end,
-            year=year,
-            season=season,
-            month=month,
-            day_of_month=day_of_month,
-            days_since_epoch=day.days_since_epoch + 1,
-        )
+    def _localize(self, days):
+        offset = 0
+        if self.hemisphere == Hemisphere.NORTHERN:
+            offset = next(i for (i, day) in enumerate(days) if day.season == Season.AUTUMN)
+        match Weekday(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset)).weekday()):
+            case Weekday.MONDAY:
+                offset -= 1
+            case Weekday.SUNDAY:
+                pass
+            case Weekday.SATURDAY:
+                offset += 1
+            case _:
+                assert False
+        gregorian_date = CANONICAL_EPOCH + timedelta(days=offset)
+        assert Weekday(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset)).weekday()) == Weekday.SUNDAY
+        assert offset >= 0
+        for (i, day) in enumerate(days[offset:]):
+            day.start = self._start_of_day(gregorian_date)
+            day.end = self._end_of_day(gregorian_date)
+            if offset > 0:
+                day.year = days[i].year
+                day.season = days[i].season
+                day.month = days[i].month
+                day.day_of_month = days[i].day_of_month
+                day.days_since_epoch = i
+            yield day
+            gregorian_date = gregorian_date + timedelta(days=1)
