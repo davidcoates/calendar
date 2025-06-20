@@ -47,7 +47,7 @@ def main():
 
     if args.command == "calendar":
         print("")
-        calendar.print(cubic_date.year, cubic_date.season, cubic_date.block, highlight=cubic_date, blocks=args.blocks)
+        calendar.print(cubic_date.year, cubic_date.block, args.blocks, highlight=cubic_date)
 
 
 if __name__ == "__main__":
