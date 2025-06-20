@@ -16,10 +16,10 @@ CANONICAL_EPOCH = date(2024, 9, 22)
 
 
 class Season(Enum):
-    BLOOMRISE = 0
+    GREENTIDE = 0
     SUNCREST = 1
-    WITHERWANE = 2
-    THAWTIDE = 3
+    EMBERFALL = 2
+    FROSTWANE = 3
 
     def next(self):
         return Season((self.value + 1) % 4)
@@ -127,7 +127,7 @@ class Calendar:
                     return True
             return False
         WIDTH = 43
-        if block == Season.BLOOMRISE:
+        if block == Season.GREENTIDE:
             print("")
             print(f"* Year {year} *".center(WIDTH))
             print("")
@@ -168,7 +168,7 @@ class Calendar:
             start=self._start_of_canonical_day(gregorian_date),
             end=self._end_of_canonical_day(gregorian_date),
             year=1,
-            block=Season.BLOOMRISE,
+            block=Season.GREENTIDE,
             day_of_block=1,
             days_since_epoch=0
         )
@@ -224,7 +224,7 @@ class Calendar:
     def _localize(self, days):
         offset = 0
         if self.hemisphere == Hemisphere.NORTHERN:
-            offset = next(i for (i, day) in enumerate(days) if day.season == Season.WITHERWANE)
+            offset = next(i for (i, day) in enumerate(days) if day.season == Season.EMBERFALL)
         match Weekday(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset)).weekday()):
             case Weekday.MONDAY:
                 offset -= 1
