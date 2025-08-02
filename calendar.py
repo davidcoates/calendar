@@ -18,8 +18,8 @@ CANONICAL_EPOCH = date(2024, 9, 22)
 class Season(Enum):
     GREENTIDE = 0
     SUNCREST = 1
-    EMBERFALL = 2
-    FROSTWANE = 3
+    EMBERWANE = 2
+    FROSTFALL = 3
 
     def next(self):
         return Season((self.value + 1) % 4)
@@ -224,7 +224,7 @@ class Calendar:
     def _localize(self, days):
         offset = 0
         if self.hemisphere == Hemisphere.NORTHERN:
-            offset = next(i for (i, day) in enumerate(days) if day.season == Season.EMBERFALL)
+            offset = next(i for (i, day) in enumerate(days) if day.season == Season.EMBERWANE)
         match Weekday(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset)).weekday()):
             case Weekday.MONDAY:
                 offset -= 1
