@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone, timedelta
 from enum import Enum, auto
 
-from format import format_time
+from .format import format_time
 
 
 class Hemisphere(Enum):

@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone, timedelta, tzinfo
 from enum import Enum, auto
 
-from solar_events import *
-from format import *
+from .solar_events import *
+from .format import *
 
 
 CANONICAL_LATITUDE = -33.865143
@@ -104,9 +104,9 @@ class Day:
 
 @dataclass
 class Calendar:
-    latitude: float
-    longitude: float
-    timezone: tzinfo
+    latitude: float = CANONICAL_LATITUDE
+    longitude: float = CANONICAL_LONGITUDE
+    timezone: tzinfo | None = None
 
     def __post_init__(self):
         self.observer = astral.Observer(self.latitude, self.longitude)
@@ -119,41 +119,6 @@ class Calendar:
             if day.start <= time < day.end:
                 return day
         return None
-
-    def print_block(self, year: int, block: Block, highlight : Day | None = None):
-        def is_solar_event_on_day(day):
-            for solar_event in SOLAR_EVENTS:
-                if day.start <= solar_event.time < day.end:
-                    return True
-            return False
-        WIDTH = 43
-        if block == Season.GREENTIDE:
-            print("")
-            print(f"* Year {year} *".center(WIDTH))
-            print("")
-        day = next(day for day in self.days if day.year == year and day.block == block)
-        assert day.day_of_block == 1
-        print(f"- {day.block} -".center(WIDTH))
-        print("-------------------------------------------")
-        print("| Sun | Mon | Tue | Wed | Thu | Fri | Sat |")
-        print("-------------------------------------------")
-        block = day.block
-        while day.block == block:
-            week = []
-            for _ in range(7):
-                day_str = f"{'>' if day == highlight else ' '}{'*' if is_solar_event_on_day(day) else ' '}{day.day_of_block:>2}{'<' if day == highlight else ' '}"
-                week.append(day_str)
-                day = self.days[day.days_since_epoch + 1]
-            print('|' + '|'.join(week) + '|')
-        print("-------------------------------------------")
-        print("")
-
-    def print(self, year: int, block: Block, blocks: int, highlight : Day | None = None):
-        for _ in range(blocks):
-            self.print_block(year, block, highlight)
-            if block == Holiday.VERNAL_EQUINOX:
-                year = year + 1
-            block = next_block(block)
 
     def _start_of_canonical_day(self, date) -> datetime:
         return astral.sun.sunrise(astral.Observer(CANONICAL_LATITUDE, CANONICAL_LONGITUDE), date, tzinfo=CANONICAL_TIMEZONE)
