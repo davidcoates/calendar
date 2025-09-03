@@ -92,9 +92,9 @@ class Day:
 
     def human_string(self):
         if isinstance(self.block, Season):
-            return f"{self.weekday}, week {self.week_of_block} of {self.block}, year {self.year}"
+            return f"{self.weekday}, Week {self.week_of_block} of {self.block}, Year {self.year}"
         elif isinstance(self.block, Holiday):
-            return f"{self.weekday}, week {self.week_of_block} of the {self.block} Holiday, year {self.year}"
+            return f"{self.weekday}, Week {self.week_of_block} of the {self.block} Holiday, Year {self.year}"
         else:
             assert False
 
