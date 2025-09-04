@@ -1,9 +1,10 @@
 import astral
 import astral.sun
-import zoneinfo
 from dataclasses import dataclass
 from datetime import date, datetime, timezone, timedelta, tzinfo
 from enum import Enum, auto
+from typing import Iterable
+import zoneinfo
 
 from .solar_events import *
 from .format import *
@@ -106,7 +107,7 @@ class Day:
 class Calendar:
     latitude: float = CANONICAL_LATITUDE
     longitude: float = CANONICAL_LONGITUDE
-    timezone: tzinfo | None = None
+    timezone: zoneinfo.ZoneInfo = CANONICAL_TIMEZONE
 
     def __post_init__(self):
         self.observer = astral.Observer(self.latitude, self.longitude)
@@ -126,7 +127,7 @@ class Calendar:
     def _end_of_canonical_day(self, date) -> datetime:
         return astral.sun.sunrise(astral.Observer(CANONICAL_LATITUDE, CANONICAL_LONGITUDE), date + timedelta(days=1), tzinfo=CANONICAL_TIMEZONE)
 
-    def _calc_canonical_days(self):
+    def _calc_canonical_days(self) -> Iterable[Day]:
         assert Weekday(self._start_of_canonical_day(CANONICAL_EPOCH).weekday()) == Weekday.SUNDAY
         gregorian_date = CANONICAL_EPOCH
         day = Day(
@@ -186,7 +187,10 @@ class Calendar:
     def _end_of_day(self, date) -> datetime:
         return astral.sun.sunrise(self.observer, date + timedelta(days=1), tzinfo=self.timezone)
 
-    def _localize(self, days):
+    def _localize(self, days: list[Day]) -> Iterable[Day]:
+        if self.timezone == CANONICAL_TIMEZONE:
+            yield from days
+            return
         offset = 0
         if self.hemisphere == Hemisphere.NORTHERN:
             offset = next(i for (i, day) in enumerate(days) if day.season == Season.EMBERWANE)
