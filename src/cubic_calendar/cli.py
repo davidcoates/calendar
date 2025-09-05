@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timezone
 
 from .core import *
+from .solar_events import SOLAR_EVENTS
 
 
 def print_block(calendar: Calendar, year: int, block: Block, highlight : Day | None = None):

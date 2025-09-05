@@ -1,3 +1,5 @@
+__all__ = ["Hemisphere", "SolarEventType", "SolarEvent", "SOLAR_EVENTS"]
+
 from dataclasses import dataclass
 from datetime import date, datetime, timezone, timedelta
 from enum import Enum, auto
