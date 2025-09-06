@@ -21,18 +21,23 @@ def print_block(calendar: Calendar, year: int, block: Block, highlight : Day | N
     day = next(day for day in calendar.days if day.year == year and day.block == block)
     assert day.day_of_block == 1
     print(f"- {day.block} -".center(WIDTH))
-    print("-------------------------------------------")
-    print("| Sun | Mon | Tue | Wed | Thu | Fri | Sat |")
-    print("-------------------------------------------")
+    print("--------------------------------------------------")
+    print("| Week | Sun | Mon | Tue | Wed | Thu | Fri | Sat |")
+    print("--------------------------------------------------")
     block = day.block
     while day.block == block:
-        week = []
+        week = [f"  {day.week_of_block:>2}  "]
         for _ in range(7):
-            day_str = f"{'>' if day == highlight else ' '}{'*' if is_solar_event_on_day(day) else ' '}{day.day_of_block:>2}{'<' if day == highlight else ' '}"
+            if day == highlight:
+                day_str = "TODAY"
+            elif is_solar_event_on_day(day):
+                day_str = "SOLAR"
+            else:
+                day_str = "     "
             week.append(day_str)
             day = calendar.days[day.days_since_epoch + 1]
         print('|' + '|'.join(week) + '|')
-    print("-------------------------------------------")
+    print("--------------------------------------------------")
     print("")
 
 
