@@ -41,7 +41,7 @@ def print_calendar(calendar: Calendar, year: int, block: Block, blocks: int, hig
         print_block(calendar, year, block, highlight)
         if block == Holiday.VERNAL_EQUINOX:
             year = year + 1
-        block = next_block(block)
+        block = block.next()
 
 
 def main():

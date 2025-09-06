@@ -36,7 +36,7 @@ class Season(Enum):
     FROSTFALL = 3
 
     def next(self):
-        return Season((self.value + 1) % 4)
+        return Holiday(self.value)
 
     def __str__(self):
         return self.name.title()
@@ -51,17 +51,11 @@ class Holiday(Enum):
     def __str__(self):
         return self.name.title().replace('_', ' ')
 
+    def next(self):
+        return Season((self.value + 1) % 4)
+
 
 type Block = Season | Holiday
-
-
-def next_block(block: Block) -> Block:
-    if isinstance(block, Holiday):
-        return Season((block.value + 1) % 4)
-    elif isinstance(block, Season):
-        return Holiday(block.value)
-    else:
-        assert False
 
 
 class Weekday(Enum):
@@ -169,12 +163,12 @@ class Calendar:
                     day_of_block = day.day_of_block + 1
                 else:
                     year = day.year + 1 if day.block == Holiday.VERNAL_EQUINOX else day.year
-                    block = next_block(day.block)
+                    block = day.block.next()
                     day_of_block = 1
             elif (isinstance(day.block, Holiday) and day.day_of_block == DAYS_IN_LEAP_BLOCK) or \
                  (isinstance(day.block, Season) and day.day_of_block == DAYS_IN_SEASON):
                 year = day.year
-                block = next_block(day.block)
+                block = day.block.next()
                 day_of_block = 1
             else:
                  year = day.year
@@ -206,7 +200,7 @@ class Calendar:
             return
         offset = 0
         if self.hemisphere == Hemisphere.NORTHERN:
-            offset = next(i for (i, day) in enumerate(days) if day.season == Season.EMBERWANE)
+            offset = next(i for (i, day) in enumerate(days) if day.block == Season.EMBERWANE)
         match Weekday(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset)).weekday()):
             case Weekday.MONDAY:
                 offset -= 1
