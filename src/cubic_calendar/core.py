@@ -59,50 +59,53 @@ type Block = Season | Holiday
 
 
 class Weekday(Enum):
-    SUNDAY = 6
-    MONDAY = 0
-    TUESDAY = 1
-    WEDNESDAY = 2
-    THURSDAY = 3
-    FRIDAY = 4
-    SATURDAY = 5
+    SUNDAY = 0
+    MONDAY = 1
+    TUESDAY = 2
+    WEDNESDAY = 3
+    THURSDAY = 4
+    FRIDAY = 5
+    SATURDAY = 6
+
+    @staticmethod
+    def from_datetime(datetime):
+        return Weekday((datetime.weekday() + 1) % 7)
 
     def __str__(self):
         return self.name.title()
 
 
-DAYS_IN_WEEK = 7
-WEEKS_IN_SEASON = 12
-DAYS_IN_SEASON = DAYS_IN_WEEK * WEEKS_IN_SEASON
-DAYS_IN_BLOCK = 7
-DAYS_IN_LEAP_BLOCK = DAYS_IN_BLOCK * 2
+LAST_DAY_OF_HOLIDAY = 7 - 1
+LAST_DAY_OF_LEAP_HOLIDAY = (7 * 2) - 1
+LAST_DAY_OF_SEASON = (7 * 12) - 1
+
 
 @dataclass
 class Day:
     start: datetime
     end: datetime
-    year: int
+    year: int # 1-indexed
     block: Block
     day_of_block: int
     days_since_epoch: int
 
     @property
+    def week(self) -> int: # 1-indexed
+        return (self.day_of_block // 7) + 1
+
+    @property
     def weekday(self) -> Weekday:
-        return Weekday((self.day_of_block + 5) % 7)
+        return Weekday(self.day_of_block % 7)
 
     @property
     def day_of_week(self) -> int:
-        return ((self.day_of_block + 1) % 7) + 1
-
-    @property
-    def week_of_block(self) -> int:
-        return ((self.day_of_block - 1) // 7) + 1
+        return self.day_of_block % 7
 
     def human_string(self):
         if isinstance(self.block, Season):
-            return f"{self.weekday}, Week {self.week_of_block} of {self.block}, Year {self.year}"
+            return f"{self.weekday}, Week {self.week} of {self.block}, Year {self.year}"
         elif isinstance(self.block, Holiday):
-            return f"{self.weekday}, Week {self.week_of_block} of the {self.block} Holiday, Year {self.year}"
+            return f"{self.weekday}, Week {self.week} of the {self.block} Holiday, Year {self.year}"
         else:
             assert False
 
@@ -135,14 +138,14 @@ class Calendar:
         return astral.sun.sunrise(astral.Observer(CANONICAL_LATITUDE, CANONICAL_LONGITUDE), date + timedelta(days=1), tzinfo=CANONICAL_TIMEZONE)
 
     def _calc_canonical_days(self) -> Iterable[Day]:
-        assert Weekday(self._start_of_canonical_day(CANONICAL_EPOCH).weekday()) == Weekday.SUNDAY
+        assert Weekday.from_datetime(self._start_of_canonical_day(CANONICAL_EPOCH)) == Weekday.SUNDAY
         gregorian_date = CANONICAL_EPOCH
         day = Day(
             start=self._start_of_canonical_day(gregorian_date),
             end=self._end_of_canonical_day(gregorian_date),
             year=1,
             block=Season.GREENTIDE,
-            day_of_block=1,
+            day_of_block=0,
             days_since_epoch=0
         )
         yield day
@@ -150,7 +153,7 @@ class Calendar:
             gregorian_date = gregorian_date + timedelta(days=1)
             start = self._start_of_canonical_day(gregorian_date)
             end = self._end_of_canonical_day(gregorian_date)
-            if isinstance(day.block, Holiday) and (day.day_of_block == DAYS_IN_BLOCK or day.day_of_block == DAYS_IN_LEAP_BLOCK):
+            if isinstance(day.block, Holiday) and (day.day_of_block == LAST_DAY_OF_HOLIDAY or day.day_of_block == LAST_DAY_OF_LEAP_HOLIDAY):
                 assert day.weekday == Weekday.SATURDAY
                 solar_events = [ solar_event for solar_event in SOLAR_EVENTS if abs(solar_event.time.date() - gregorian_date) <= timedelta(days=14) ]
                 if not solar_events:
@@ -164,11 +167,11 @@ class Calendar:
                 else:
                     year = day.year + 1 if day.block == Holiday.VERNAL_EQUINOX else day.year
                     block = day.block.next()
-                    day_of_block = 1
-            elif isinstance(day.block, Season) and day.day_of_block == DAYS_IN_SEASON:
+                    day_of_block = 0
+            elif isinstance(day.block, Season) and day.day_of_block == LAST_DAY_OF_SEASON:
                 year = day.year
                 block = day.block.next()
-                day_of_block = 1
+                day_of_block = 0
             else:
                  year = day.year
                  block = day.block
@@ -200,7 +203,7 @@ class Calendar:
         offset = 0
         if self.hemisphere == Hemisphere.NORTHERN:
             offset = next(i for (i, day) in enumerate(days) if day.block == Season.EMBERWANE)
-        match Weekday(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset)).weekday()):
+        match Weekday.from_datetime(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset))):
             case Weekday.MONDAY:
                 offset -= 1
             case Weekday.SUNDAY:
@@ -210,7 +213,7 @@ class Calendar:
             case _:
                 assert False
         gregorian_date = CANONICAL_EPOCH + timedelta(days=offset)
-        assert Weekday(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset)).weekday()) == Weekday.SUNDAY
+        assert Weekday.from_datetime(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset))) == Weekday.SUNDAY
         assert offset >= 0
         for (i, day) in enumerate(days[offset:]):
             day.start = self._start_of_day(gregorian_date)

@@ -19,14 +19,14 @@ def print_block(calendar: Calendar, year: int, block: Block, highlight : Day | N
         print(f"* Year {year} *".center(WIDTH))
         print("")
     day = next(day for day in calendar.days if day.year == year and day.block == block)
-    assert day.day_of_block == 1
+    assert day.day_of_block == 0
     print(f"- {day.block} -".center(WIDTH))
     print("--------------------------------------------------")
     print("| Week | Sun | Mon | Tue | Wed | Thu | Fri | Sat |")
     print("--------------------------------------------------")
     block = day.block
     while day.block == block:
-        week = [f"  {day.week_of_block:>2}  "]
+        week = [f"  {day.week:>2}  "]
         for _ in range(7):
             if day == highlight:
                 day_str = "TODAY"
