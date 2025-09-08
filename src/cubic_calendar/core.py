@@ -131,18 +131,18 @@ class Calendar:
                 return day
         return None
 
-    def _start_of_canonical_day(self, date) -> datetime:
+    def _sunrise_of_canonical_day(self, date) -> datetime:
         return astral.sun.sunrise(astral.Observer(CANONICAL_LATITUDE, CANONICAL_LONGITUDE), date, tzinfo=CANONICAL_TIMEZONE)
 
-    def _end_of_canonical_day(self, date) -> datetime:
-        return astral.sun.sunrise(astral.Observer(CANONICAL_LATITUDE, CANONICAL_LONGITUDE), date + timedelta(days=1), tzinfo=CANONICAL_TIMEZONE)
+    def _sunset_of_canonical_day(self, date) -> datetime:
+        return astral.sun.sunset(astral.Observer(CANONICAL_LATITUDE, CANONICAL_LONGITUDE), date, tzinfo=CANONICAL_TIMEZONE)
 
     def _calc_canonical_days(self) -> Iterable[Day]:
-        assert Weekday.from_datetime(self._start_of_canonical_day(CANONICAL_EPOCH)) == Weekday.SUNDAY
+        assert Weekday.from_datetime(self._sunrise_of_canonical_day(CANONICAL_EPOCH)) == Weekday.SUNDAY
         gregorian_date = CANONICAL_EPOCH
         day = Day(
-            start=self._start_of_canonical_day(gregorian_date),
-            end=self._end_of_canonical_day(gregorian_date),
+            start=self._sunrise_of_canonical_day(gregorian_date),
+            end=self._sunrise_of_canonical_day(gregorian_date + timedelta(days=1)),
             year=1,
             block=Season.GREENTIDE,
             day_of_block=0,
@@ -151,15 +151,15 @@ class Calendar:
         yield day
         while True:
             gregorian_date = gregorian_date + timedelta(days=1)
-            start = self._start_of_canonical_day(gregorian_date)
-            end = self._end_of_canonical_day(gregorian_date)
+            start = self._sunrise_of_canonical_day(gregorian_date)
+            end = self._sunrise_of_canonical_day(gregorian_date + timedelta(days=1))
             if isinstance(day.block, Holiday) and (day.day_of_block == LAST_DAY_OF_HOLIDAY or day.day_of_block == LAST_DAY_OF_LEAP_HOLIDAY):
                 assert day.weekday == Weekday.SATURDAY
                 solar_events = [ solar_event for solar_event in SOLAR_EVENTS if abs(solar_event.time.date() - gregorian_date) <= timedelta(days=14) ]
                 if not solar_events:
                     return
                 [ solar_event ] = solar_events
-                leap_week_threshold = self._end_of_canonical_day(gregorian_date + timedelta(days=2))
+                leap_week_threshold = self._sunset_of_canonical_day(gregorian_date + timedelta(days=1))
                 if solar_event.time > leap_week_threshold: # insert a leap week
                     year = day.year
                     block = day.block
