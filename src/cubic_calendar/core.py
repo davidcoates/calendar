@@ -150,7 +150,7 @@ class Calendar:
             gregorian_date = gregorian_date + timedelta(days=1)
             start = self._start_of_canonical_day(gregorian_date)
             end = self._end_of_canonical_day(gregorian_date)
-            if isinstance(day.block, Holiday) and day.day_of_block == DAYS_IN_BLOCK:
+            if isinstance(day.block, Holiday) and (day.day_of_block == DAYS_IN_BLOCK or day.day_of_block == DAYS_IN_LEAP_BLOCK):
                 assert day.weekday == Weekday.SATURDAY
                 solar_events = [ solar_event for solar_event in SOLAR_EVENTS if abs(solar_event.time.date() - gregorian_date) <= timedelta(days=14) ]
                 if not solar_events:
@@ -165,8 +165,7 @@ class Calendar:
                     year = day.year + 1 if day.block == Holiday.VERNAL_EQUINOX else day.year
                     block = day.block.next()
                     day_of_block = 1
-            elif (isinstance(day.block, Holiday) and day.day_of_block == DAYS_IN_LEAP_BLOCK) or \
-                 (isinstance(day.block, Season) and day.day_of_block == DAYS_IN_SEASON):
+            elif isinstance(day.block, Season) and day.day_of_block == DAYS_IN_SEASON:
                 year = day.year
                 block = day.block.next()
                 day_of_block = 1
