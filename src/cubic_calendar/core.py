@@ -82,12 +82,21 @@ LAST_DAY_OF_SEASON = (7 * 12) - 1
 
 @dataclass
 class Day:
-    start: datetime
-    end: datetime
+    sunrise: datetime
+    sunset: datetime
+    next_sunrise: datetime
     year: int # 1-indexed
     block: Block
     day_of_block: int
     days_since_epoch: int
+
+    @property
+    def start(self) -> datetime:
+        return self.sunrise
+
+    @property
+    def end(self) -> datetime:
+        return self.next_sunrise
 
     @property
     def week(self) -> int: # 1-indexed
@@ -141,8 +150,9 @@ class Calendar:
         assert Weekday.from_datetime(self._sunrise_of_canonical_day(CANONICAL_EPOCH)) == Weekday.SUNDAY
         gregorian_date = CANONICAL_EPOCH
         day = Day(
-            start=self._sunrise_of_canonical_day(gregorian_date),
-            end=self._sunrise_of_canonical_day(gregorian_date + timedelta(days=1)),
+            sunrise=self._sunrise_of_canonical_day(gregorian_date),
+            sunset=self._sunset_of_canonical_day(gregorian_date),
+            next_sunrise=self._sunrise_of_canonical_day(gregorian_date + timedelta(days=1)),
             year=1,
             block=Season.GREENTIDE,
             day_of_block=0,
@@ -151,8 +161,9 @@ class Calendar:
         yield day
         while True:
             gregorian_date = gregorian_date + timedelta(days=1)
-            start = self._sunrise_of_canonical_day(gregorian_date)
-            end = self._sunrise_of_canonical_day(gregorian_date + timedelta(days=1))
+            sunrise = self._sunrise_of_canonical_day(gregorian_date)
+            sunset = self._sunset_of_canonical_day(gregorian_date)
+            next_sunrise = self._sunrise_of_canonical_day(gregorian_date + timedelta(days=1))
             if isinstance(day.block, Holiday) and (day.day_of_block == LAST_DAY_OF_HOLIDAY or day.day_of_block == LAST_DAY_OF_LEAP_HOLIDAY):
                 assert day.weekday == Weekday.SATURDAY
                 solar_events = [ solar_event for solar_event in SOLAR_EVENTS if abs(solar_event.time.date() - gregorian_date) <= timedelta(days=14) ]
@@ -177,8 +188,9 @@ class Calendar:
                  block = day.block
                  day_of_block = day.day_of_block + 1
             day = Day(
-                start=start,
-                end=end,
+                sunrise=sunrise,
+                sunset=sunset,
+                next_sunrise=next_sunrise,
                 year=year,
                 block=block,
                 day_of_block=day_of_block,
@@ -190,11 +202,11 @@ class Calendar:
         days = list(self._calc_canonical_days())
         return list(self._localize(days))
 
-    def _start_of_day(self, date) -> datetime:
+    def _sunrise_of_day(self, date) -> datetime:
         return astral.sun.sunrise(self.observer, date, tzinfo=self.timezone)
 
-    def _end_of_day(self, date) -> datetime:
-        return astral.sun.sunrise(self.observer, date + timedelta(days=1), tzinfo=self.timezone)
+    def _sunset_of_day(self, date) -> datetime:
+        return astral.sun.sunset(self.observer, date, tzinfo=self.timezone)
 
     def _localize(self, days: list[Day]) -> Iterable[Day]:
         if self.timezone == CANONICAL_TIMEZONE:
@@ -203,7 +215,7 @@ class Calendar:
         offset = 0
         if self.hemisphere == Hemisphere.NORTHERN:
             offset = next(i for (i, day) in enumerate(days) if day.block == Season.EMBERWANE)
-        match Weekday.from_datetime(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset))):
+        match Weekday.from_datetime(self._sunrise_of_day(CANONICAL_EPOCH + timedelta(days=offset))):
             case Weekday.MONDAY:
                 offset -= 1
             case Weekday.SUNDAY:
@@ -213,11 +225,12 @@ class Calendar:
             case _:
                 assert False
         gregorian_date = CANONICAL_EPOCH + timedelta(days=offset)
-        assert Weekday.from_datetime(self._start_of_day(CANONICAL_EPOCH + timedelta(days=offset))) == Weekday.SUNDAY
+        assert Weekday.from_datetime(self._sunrise_of_day(CANONICAL_EPOCH + timedelta(days=offset))) == Weekday.SUNDAY
         assert offset >= 0
         for (i, day) in enumerate(days[offset:]):
-            day.start = self._start_of_day(gregorian_date)
-            day.end = self._end_of_day(gregorian_date)
+            day.sunrise = self._sunrise_of_day(gregorian_date)
+            day.sunset = self._sunset_of_day(gregorian_date)
+            day.next_sunrise = self._sunrise_of_day(gregorian_date + timedelta(days=1))
             if offset > 0:
                 day.year = days[i].year
                 day.block = days[i].block
